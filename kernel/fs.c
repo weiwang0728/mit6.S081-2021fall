@@ -371,7 +371,6 @@ iunlockput(struct inode *ip)
 // in blocks on the disk. The first NDIRECT block numbers
 // are listed in ip->addrs[].  The next NINDIRECT blocks are
 // listed in block ip->addrs[NDIRECT].
-
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
 static uint
@@ -401,6 +400,28 @@ bmap(struct inode *ip, uint bn)
     return addr;
   }
 
+  bn -= NINDIRECT;
+  if (bn < NDOUBLYINDIRECT) {
+    if ((addr = ip->addrs[NDIRECT + 1]) == 0)
+      ip->addrs[NDIRECT + 1] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    int idx = bn / NINDIRECT;
+    if ((addr = a[idx]) == 0) {
+      a[idx] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    bp = bread(ip->dev, a[idx]);
+    a = (uint*)bp->data;
+    idx = bn % NINDIRECT;
+    if ((addr = a[idx]) == 0) {
+      a[idx] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    return addr;
+  }
   panic("bmap: out of range");
 }
 
@@ -409,9 +430,9 @@ bmap(struct inode *ip, uint bn)
 void
 itrunc(struct inode *ip)
 {
-  int i, j;
-  struct buf *bp;
-  uint *a;
+  int i, j, k;
+  struct buf *bp, *bp1;
+  uint *a, *b;
 
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
@@ -430,6 +451,26 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if (ip->addrs[NDIRECT + 1]) {
+    bp = bread(ip->dev, ip->addrs[NDIRECT + 1]);
+    a = (uint*)bp->data;
+    for (j = 0; j < NINDIRECT; j ++) {
+      if (a[j]) {
+        bp1 = bread(ip->dev, a[j]);
+        b = (uint*)bp1->data;
+        for (k = 0; k < NINDIRECT; k ++) {
+          if (b[k])
+            bfree(ip->dev, b[k]);
+        }
+        brelse(bp1);
+        bfree(ip->dev, a[j]);
+      }
+    }
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT + 1]);
+    ip->addrs[NDIRECT + 1] = 0;
   }
 
   ip->size = 0;
@@ -626,7 +667,7 @@ skipelem(char *path, char *name)
 // path element into name, which must have room for DIRSIZ bytes.
 // Must be called inside a transaction since it calls iput().
 static struct inode*
-namex(char *path, int nameiparent, char *name)
+namex(char *path, int nameiparent, char *name, int nofollow)
 {
   struct inode *ip, *next;
 
@@ -664,11 +705,24 @@ struct inode*
 namei(char *path)
 {
   char name[DIRSIZ];
-  return namex(path, 0, name);
+  return namex(path, 0, name, 0);
 }
 
 struct inode*
 nameiparent(char *path, char *name)
 {
-  return namex(path, 1, name);
+  return namex(path, 1, name, 0);
+}
+
+struct inode*
+namei_nofollow(char *path)
+{
+  char name[DIRSIZ];
+  return namex(path, 0, name, 1);
+}
+
+struct inode*
+nameiparent_nofollow(char *path, char *name)
+{
+  return namex(path, 1, name, 1);
 }

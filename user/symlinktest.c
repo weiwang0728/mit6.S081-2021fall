@@ -15,7 +15,7 @@ static int failed = 0;
 static void testsymlink(void);
 static void concur(void);
 static void cleanup(void);
-
+extern int symlink(char* target, char* path);
 int
 main(int argc, char *argv[])
 {

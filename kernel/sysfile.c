@@ -16,6 +16,8 @@
 #include "file.h"
 #include "fcntl.h"
 
+extern struct inode*  namei_nofollow(char *path);
+struct inode* nameiparent_nofollow(char *path, char *name);
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -126,7 +128,7 @@ sys_link(void)
     return -1;
 
   begin_op();
-  if((ip = namei(old)) == 0){
+  if((ip = namei_nofollow(old)) == 0){
     end_op();
     return -1;
   }
@@ -193,7 +195,7 @@ sys_unlink(void)
     return -1;
 
   begin_op();
-  if((dp = nameiparent(path, name)) == 0){
+  if((dp = nameiparent_nofollow(path, name)) == 0){
     end_op();
     return -1;
   }
@@ -291,6 +293,7 @@ sys_open(void)
   struct file *f;
   struct inode *ip;
   int n;
+  int follow = 1;
 
   if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
     return -1;
@@ -310,6 +313,33 @@ sys_open(void)
     }
     ilock(ip);
     if(ip->type == T_DIR && omode != O_RDONLY){
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+  }
+
+  if (omode & O_NOFOLLOW) {
+    follow = 0;
+  } 
+  if (follow) {
+    int depth = 0;
+    while (ip->type == T_SYMLINK && depth < 10) {
+      char target[MAXPATH];
+      if (readi(ip, 0, (uint64)target, 0, MAXPATH) < 0) {
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
+      iunlock(ip);
+      if ((ip = namei(target)) == 0) {
+        end_op();
+        return -1;
+      }
+      ilock(ip);
+      depth ++;
+    }
+    if (depth == 10) {
       iunlockput(ip);
       end_op();
       return -1;
@@ -482,5 +512,69 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64 
+sys_symlink(void) {
+  char target[MAXPATH], path[MAXPATH];
+
+  if (argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
+    return -1;
+
+  struct inode *ip, *dp;
+  char name[DIRSIZ];
+  begin_op();
+  if ((dp = nameiparent(path, name)) == 0) {
+    end_op();
+    return -1;
+  }
+
+  ilock(dp);
+
+  if ((ip = dirlookup(dp, name, 0)) != 0) {
+    iunlockput(dp);
+    ilock(ip);
+    if (ip->type == T_DIR && dp != ip) 
+      iunlockput(ip);
+    else
+      iunlockput(ip);
+    end_op();
+    return -1;
+  }
+
+  if ((ip = ialloc(dp->dev, T_SYMLINK)) == 0) {
+    panic("create: ialloc");
+  }
+
+  ilock(ip);
+  ip->major = ip->minor = 0;
+  ip->nlink = 1;
+  // strncpy((char*)ip->addrs, target, sizeof(ip->addrs));
+  if (writei(ip, 0, (uint64)target, 0, strlen(target)) < 0) {
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+  iupdate(ip);
+  // iunlock(ip);
+
+  if (dirlink(dp, name, ip->inum) < 0) {
+    panic("create: dirlink");
+  }
+
+  iunlockput(dp);
+  // ip = create(path, T_SYMLINK, 0, 0);
+  // if (ip == 0) {
+  //   end_op();
+  //   return -1;
+  // }
+
+  if (writei(ip, 0, (uint64)target, 0, strlen(target)) < 0) {
+    end_op();
+    return -1;
+  }
+  iunlockput(ip);
+  end_op();
   return 0;
 }
