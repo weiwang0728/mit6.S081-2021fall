@@ -28,6 +28,16 @@ struct cpu {
 
 extern struct cpu cpus[NCPU];
 
+struct mmap_region{
+  uint64 start;
+  int length;
+  int prot;
+  struct file * file;
+  uint offset;
+  int flags;
+  struct mmap_region* next;
+};
+
 // per-process data for the trap handling code in trampoline.S.
 // sits in a page by itself just under the trampoline page in the
 // user page table. not specially mapped in the kernel page table.
@@ -105,4 +115,5 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  struct mmap_region* mmap_regions;
 };

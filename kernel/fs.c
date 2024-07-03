@@ -672,3 +672,16 @@ nameiparent(char *path, char *name)
 {
   return namex(path, 1, name);
 }
+
+
+int read_region_from_file(struct file* f, uint64 start, uint offset, uint64 addr, char* mem) {
+  uint64 file_offset = offset + (addr - start);
+  ilock(f->ip);
+  int btyes_read = readi(f->ip, 0, (uint64)mem, file_offset, PGSIZE);
+  iunlock(f->ip);
+  if (btyes_read < 0) {
+    return -1;
+  }
+  return 0;
+}
+

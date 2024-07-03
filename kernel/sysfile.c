@@ -18,6 +18,7 @@
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
+extern int write_mmap_file(struct inode* ip, int i);
 static int
 argfd(int n, int *pfd, struct file **pf)
 {
@@ -481,6 +482,62 @@ sys_pipe(void)
     fileclose(rf);
     fileclose(wf);
     return -1;
+  }
+  return 0;
+}
+
+
+uint64 
+sys_mmap(void){
+  int addr, length, offset;
+  int prot, flags, fd;
+
+  if (argint(0, &addr) < 0 || argint(1, &length) || argint(2, &prot) < 0
+    || argint(3, &flags) < 0 || argint(4, &fd) < 0  || argint(5, &offset)) 
+      return -1;
+  
+  struct file* f;
+  if ((f = myproc()->ofile[fd]) == 0) {
+    return -1;
+  }
+
+  if ((prot & PROT_WRITE) != 0 && f->writable == 0 && (flags & MAP_PRIVATE) == 0){
+    return -1;
+  }
+  struct proc *p = myproc();
+  struct mmap_region* region = (struct mmap_region*)kalloc();
+  if (region == 0) 
+    return -1;
+  
+  addr = p->sz;
+  region->start = addr;
+  region->file = f;
+  region->length = length;
+  region->prot = prot;
+  region->offset = (uint)offset;
+  region->next = p->mmap_regions;
+  region->flags = flags;
+  p->mmap_regions = region;
+  p->sz += length;
+  filedup(f);
+  return (uint64)addr;
+}
+
+uint64
+sys_munmap(void) {
+  int addr, length;
+  if (argint(0, &addr) < 0 || argint(1, &length) < 0) 
+    return -1;
+
+  struct proc* p = myproc();
+
+  struct mmap_region* regions = p->mmap_regions;
+  while (regions) {
+    if (regions->start == addr && regions->flags & MAP_SHARED) {
+      printf("unmap addr %d\n", addr);
+      filewrite(regions->file, addr, length);
+    }
+    regions = regions->next;
   }
   return 0;
 }

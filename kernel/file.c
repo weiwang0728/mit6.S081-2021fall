@@ -174,6 +174,7 @@ filewrite(struct file *f, uint64 addr, int n)
     }
     ret = (i == n ? n : -1);
   } else {
+    printf("file type %d\n", f->type);
     panic("filewrite");
   }
 

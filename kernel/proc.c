@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
 
 struct cpu cpus[NCPU];
 
@@ -19,7 +20,9 @@ extern void forkret(void);
 static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
-
+extern int read_region_from_file(struct file* f, uint64 start, uint offset, uint64 addr, char* mem);
+pte_t *
+walk(pagetable_t pagetable, uint64 va, int alloc);
 // helps ensure that wakeups of wait()ing
 // parents are not lost. helps obey the
 // memory model when using p->parent.
@@ -653,4 +656,59 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+
+
+
+struct mmap_region* find_mmap_region(struct proc *p, uint64 addr) {
+  struct mmap_region* region = p->mmap_regions;
+  while (region != 0) {
+    if (region->start <= addr && addr < region->start + region->length) {
+      return region;
+    }
+    region = region->next;
+  }
+  return 0;
+}
+
+
+int lazy_mmap_handler(uint64 fault_addr) {
+  struct proc *p = myproc();
+  struct mmap_region* region = find_mmap_region(p, fault_addr);
+
+  if (region == 0) {
+    return -1;
+  }
+
+  char* mem = kalloc();
+  if (mem == 0) {
+    return -1;
+  }
+
+  memset(mem, 0, PGSIZE);
+
+  // if (mappages(p->pagetable, PGROUNDDOWN(fault_addr), PGSIZE, (uint64)mem, PTE_W | PTE_R | PTE_U | PTE_X) != 0) {
+  //   kfree(mem);
+  //   return -1;
+  // }
+
+  if (read_region_from_file(region->file, region->start, region->offset, fault_addr, mem) != 0) {
+    kfree(mem);
+    return -1;
+  }
+
+  int flags = PTE_U;
+  if (region->prot & PROT_READ) flags |= PTE_R;
+  if (region->prot & PROT_WRITE) flags |= PTE_W;
+  if (region->prot & PROT_EXEC) flags |= PTE_X;
+
+  if (mappages(p->pagetable, fault_addr, PGSIZE, (uint64)mem, flags) != 0) {
+    printf("mappages failed\n");
+    kfree(mem);
+    p->killed = 1;
+    return -2;
+  }
+
+  return 0;
 }

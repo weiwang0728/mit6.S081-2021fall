@@ -184,3 +184,6 @@ void            virtio_disk_intr(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+
+#define MMAPBASE 0x40000000L // Example base address
+#define MMAPEND  0x80000000L // Example end address

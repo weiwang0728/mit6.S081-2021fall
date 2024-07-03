@@ -10,7 +10,7 @@ struct spinlock tickslock;
 uint ticks;
 
 extern char trampoline[], uservec[], userret[];
-
+extern int lazy_mmap_handler(uint64 fault_addr);
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
 
@@ -67,6 +67,12 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if (r_scause() == 13){
+    uint64 fault_addr = r_stval();
+    printf("fault addr is %d\n", fault_addr);
+    if (lazy_mmap_handler(fault_addr) != 0) {
+      return;
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
