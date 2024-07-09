@@ -135,6 +135,7 @@ found:
     return 0;
   }
 
+  p->trace_mask = 0;
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -302,6 +303,8 @@ fork(void)
   np->cwd = idup(p->cwd);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
+  
+  np->trace_mask = p->trace_mask;
 
   pid = np->pid;
 
@@ -653,4 +656,18 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+//return the number of processes
+uint64 numProcess() {
+  uint64 num = 0;
+  for (int i = 0; i < NPROC; i ++) {
+    acquire(&proc[i].lock);
+    if (proc[i].state != UNUSED) {
+      num ++;
+    }
+    release(&proc[i].lock);
+  }
+  return num;
+
 }
