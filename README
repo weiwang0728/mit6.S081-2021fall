@@ -1,47 +1,22 @@
-xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
-Version 6 (v6).  xv6 loosely follows the structure and style of v6,
-but is implemented for a modern RISC-V multiprocessor using ANSI C.
+lab2 syscall
 
-ACKNOWLEDGMENTS
+1. System call tracing
+问题描述:用户程序调用系统调用trace之后,在进行系统调用时会根据是否被trace打印到命令行。
 
-xv6 is inspired by John Lions's Commentary on UNIX 6th Edition (Peer
-to Peer Communications; ISBN: 1-57398-013-7; 1st edition (June 14,
-2000)). See also https://pdos.csail.mit.edu/6.828/, which
-provides pointers to on-line resources for v6.
+解决思路: 
+    1. trace系统调用改变当前进程的trace_mask(进程初始化为0)。
+    2. 在内核进行系统调用入口选择流程的时候， 判断 (1 << syscall_num & trace_mask) 决定是否打印当前执行的系统调用。
 
-The following people have made contributions: Russ Cox (context switching,
-locking), Cliff Frey (MP), Xiao Yu (MP), Nickolai Zeldovich, and Austin
-Clements.
+2. Sysinfo
+问题描述： 用户程序调用系统调用sysinfo, 传入结构体sysinfo, 返回系统当前实际的sysinfo, 即当前可用物理内存的大小和当前系统进程的数量。
 
-We are also grateful for the bug reports and patches contributed by
-Takahiro Aoyagi, Silas Boyd-Wickizer, Anton Burtsev, Ian Chen, Dan
-Cross, Cody Cutler, Mike CAT, Tej Chajed, Asami Doi, eyalz800, Nelson
-Elhage, Saar Ettinger, Alice Ferrazzi, Nathaniel Filardo, flespark,
-Peter Froehlich, Yakir Goaron,Shivam Handa, Matt Harvey, Bryan Henry,
-jaichenhengjie, Jim Huang, Matúš Jókay, Alexander Kapshuk, Anders
-Kaseorg, kehao95, Wolfgang Keller, Jungwoo Kim, Jonathan Kimmitt,
-Eddie Kohler, Vadim Kolontsov , Austin Liew, l0stman, Pavan
-Maddamsetti, Imbar Marinescu, Yandong Mao, , Matan Shabtay, Hitoshi
-Mitake, Carmi Merimovich, Mark Morrissey, mtasm, Joel Nider,
-OptimisticSide, Greg Price, Jude Rich, Ayan Shafqat, Eldar Sehayek,
-Yongming Shen, Fumiya Shigemitsu, Cam Tenny, tyfkda, Warren Toomey,
-Stephen Tu, Rafael Ubal, Amane Uehara, Pablo Ventura, Xi Wang, Keiichi
-Watanabe, Nicolas Wolovick, wxdao, Grant Wu, Jindong Zhang, Icenowy
-Zheng, ZhUyU1997, and Zou Chang Wei.
+解决思路:
+    1. 实现计算当前系统可用物理内存大小和当前系统进程数量的函数。
+    2. sysinfo返回1中的函数的返回值。
 
-The code in the files that constitute xv6 is
-Copyright 2006-2020 Frans Kaashoek, Robert Morris, and Russ Cox.
+拓展性问题：
+1. 内核系统调用如何实现读取用户进程传入的参数？
+   系统调用的参数保存到trapframe中的a0 - a5寄存器。
 
-ERROR REPORTS
-
-Please send errors and suggestions to Frans Kaashoek and Robert Morris
-(kaashoek,rtm@mit.edu). The main purpose of xv6 is as a teaching
-operating system for MIT's 6.S081, so we are more interested in
-simplifications and clarifications than new features.
-
-BUILDING AND RUNNING XV6
-
-You will need a RISC-V "newlib" tool chain from
-https://github.com/riscv/riscv-gnu-toolchain, and qemu compiled for
-riscv64-softmmu. Once they are installed, and in your shell
-search path, you can run "make qemu".
+2. 系统调用如何实现返回变量给用户进程？
+    使用用户进程传入的addr,根据页表的映射,将变量copy到虚拟地址addr对应的物理内存里,即值就保存到了用户进程。
